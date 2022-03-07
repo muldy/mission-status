@@ -1,12 +1,17 @@
 import sys
 import tkinter as tk
+from ttkHyperlinkLabel import HyperlinkLabel
 import requests
 import json
 import os
 import logging
 from config import appname, appversion, config
 
-inventory = dict()
+this = sys.modules[__name__] 
+
+DEBUG = False
+
+this.inventory = dict()
 
 # For compatibility with pre-5.0.0
 if not hasattr(config, 'get_int'):
@@ -41,7 +46,43 @@ if not logger.hasHandlers():
 
 def plugin_start3(plugin_dir):
     logger.info( "Mission Status started")
+    
+    if (DEBUG):
+        this.inventory["852166136"] = json.loads("{ \"timestamp\":\"2022-03-06T16:37:47Z\",\
+             \"event\":\"MissionAccepted\", \"Faction\":\"Perez Ring Brewery\", \
+             \"Name\":\"Mission_PassengerBulk\", \"LocalisedName\":\"12 Tourists Seeking Transport\", \
+             \"DestinationSystem\":\"Phekda\", \"DestinationStation\":\"Leckie Town\", \
+             \"Expiry\":\"2022-03-06T19:13:12Z\", \"Wing\":false, \"Influence\":\"++\", \
+             \"Reputation\":\"++\", \"Reward\":381616, \"PassengerCount\":12, \
+             \"PassengerVIPs\":false, \"PassengerWanted\":false, \
+             \"PassengerType\":\"Tourist\", \"MissionID\":852166136 }")
+        logger.info("Inventory: %s",json.dumps(this.inventory, indent=4, sort_keys=True))
     return "Mission Status"
+
+def plugin_app(parent):
+	# Adds to the main page UI
+	this.frame = tk.Frame(parent)
+	this.title = tk.Label(this.frame, text="Mission Status")
+	this.updateIndicator = HyperlinkLabel(this.frame, text="Update availabe", anchor=tk.W, url='https://github.com/repos/muldy/mission-status/releases')
+	this.manifest = tk.Label(this.frame)
+	this.title.grid(row = 0, column = 0)
+	return this.frame
+
+def update_screen():
+    currentMission = 0
+    manifest = ""
+    for item in this.inventory:
+        currentMission+=1
+        line = "{id} {system} {station}".format(id = this.inventory[item]['MissionID'], 
+            system=this.inventory[item]["DestinationSystem"],station=this.inventory[item]["DestinationStation"])
+        manifest = manifest+"\n"+line
+
+    this.title["text"] = "Mission Status ({curr})".format(curr = currentMission)
+    this.manifest["text"] = manifest.strip() # Remove leading newline
+    this.title.grid()
+    this.manifest.grid()
+    if manifest.strip() == "":
+        this.manifest.grid_remove()
 
 def plugin_stop():
 	"""
@@ -72,18 +113,18 @@ def journal_entry(cmdr, is_beta, system, station, entry, state):
         #   "PassengerType":"Tourist", 
         #   "MissionID":852166136 
         #   }
-        if (entry["MissionID"] not in inventory):
-            inventory[entry["MissionID"]] = entry
+        if (entry["MissionID"] not in this.inventory):
+            this.inventory[entry["MissionID"]] = entry
         logger.info( "%s | %s",entry['event'],entry)
 
     elif entry['event'] == 'MissionUpdated':
         is_mission_related = True
-        inventory[entry["MissionID"]] = entry
+        this.inventory[entry["MissionID"]] = entry
         logger.info( "%s | %s",entry['event'],entry)
 
     elif entry['event'] == 'MissionCompleted':
         is_mission_related = True
-        remove_key = inventory.pop(entry["MissionID"], None)
+        remove_key = this.inventory.pop(entry["MissionID"], None)
         # { "timestamp":"2021-06-08T17:25:38Z",
 		#  "event":"MissionCompleted",
 		#  "Faction":"Omicron Columbae Patrons of Law",
@@ -115,7 +156,7 @@ def journal_entry(cmdr, is_beta, system, station, entry, state):
 
     elif entry['event'] == 'MissionRedirected':
         is_mission_related = True
-        inventory[entry["MissionID"]] = entry
+        this.inventory[entry["MissionID"]] = entry
         # { "timestamp":"2021-06-13T18:26:51Z",
 		#  "event":"MissionRedirected",
 		#  "MissionID":782742974,
@@ -139,7 +180,7 @@ def journal_entry(cmdr, is_beta, system, station, entry, state):
         
     elif entry['event'] == 'MissionAbandoned':
         is_mission_related = True
-        remove_key = inventory.pop(entry["MissionID"], None)
+        remove_key = this.inventory.pop(entry["MissionID"], None)
         # { "timestamp":"2021-06-13T17:54:31Z",
 		#  "event":"MissionAbandoned",
 		#  "Name":"Mission_OnFoot_Collect_008_name",
@@ -147,8 +188,10 @@ def journal_entry(cmdr, is_beta, system, station, entry, state):
         logger.info( "%s | %s",entry['event'],entry)
     
     if is_mission_related:
-        logger.info("Inventory: %s",json.dumps(inventory, indent=4, sort_keys=True))
+        logger.info("Inventory: %s",json.dumps(this.inventory, indent=4, sort_keys=True))
+        update_screen()
+    
         
 
 def cmdr_data(data, is_beta):
-	pass
+    pass
